@@ -11,41 +11,48 @@ import (
 	"sync"
 )
 
+const inlineWord = "Go"
+
 func main() {
-	const inlineWord = "Go"
 	in := bufio.NewScanner(os.Stdin)
-	total, ratelimit := 0, 5
+
+	total := 0
+	datach := make(chan int)
+	go func() {
+		for data := range datach {
+			total += data
+		}
+	}()
+
+	ratelimit := 5
+	// канал, реуглирующий ограничение на количество одновременно выполняемых запросов
 	quotaCh := make(chan struct{}, ratelimit)
+	// для синхронизации горутин, после окончания данных в потоке
 	wg := &sync.WaitGroup{}
-	i := 0
 
 	for in.Scan() {
 		txt := in.Text()
-
-		quotaCh <- struct{}{}
-		datach := make(chan string)
 		wg.Add(1)
-		i++
-		go func(i int) {
-			fmt.Printf("start %d task\n", i)
-			body, err := get(txt)
-			if err != nil {
-				log.Fatalf("cann't get content from %s", txt)
-			}
-			datach <- body
-		}(i)
-
-		go func(i int) {
-			fmt.Printf("start count for %d task\n", i)
-			cnt := strings.Count(<-datach, inlineWord)
-			total += cnt
-			fmt.Printf("Count for %s: %d\n", txt, cnt)
-			<-quotaCh
-			wg.Done()
-		}(i)
+		go startWorker(wg, txt, quotaCh, datach)
 	}
+
 	wg.Wait()
+	close(datach)
 	fmt.Printf("Total: %d\n", total)
+}
+
+func startWorker(wg *sync.WaitGroup, uri string, quotaCh chan struct{}, datach chan int) {
+	quotaCh <- struct{}{}
+	defer wg.Done()
+	body, err := get(uri)
+	if err != nil {
+		log.Fatalf("can't get content from %s", uri)
+	}
+
+	cnt := strings.Count(body, inlineWord)
+	fmt.Printf("Count for %s: %d\n", uri, cnt)
+	datach <- cnt
+	<-quotaCh
 }
 
 func get(uri string) (string, error) {
