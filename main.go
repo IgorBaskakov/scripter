@@ -12,6 +12,7 @@ import (
 )
 
 const inlineWord = "golang"
+const workerlimit = 5
 
 func main() {
 	in := bufio.NewScanner(os.Stdin)
@@ -26,15 +27,15 @@ func main() {
 		dataresult <- total
 	}()
 
-	ratelimit := 5
 	// канал, реуглирующий ограничение на количество одновременно выполняемых запросов
-	quotaCh := make(chan struct{}, ratelimit)
+	quotaCh := make(chan struct{}, workerlimit)
 	// для синхронизации горутин, после окончания данных в потоке
 	wg := &sync.WaitGroup{}
 
 	for in.Scan() {
 		txt := in.Text()
 		wg.Add(1)
+		quotaCh <- struct{}{}
 		go startWorker(wg, txt, quotaCh, datach)
 	}
 
@@ -44,8 +45,10 @@ func main() {
 }
 
 func startWorker(wg *sync.WaitGroup, uri string, quotaCh chan struct{}, datach chan int) {
-	quotaCh <- struct{}{}
-	defer wg.Done()
+	defer func() {
+		wg.Done()
+		<-quotaCh
+	}()
 	body, err := get(uri)
 	if err != nil {
 		log.Fatalf("can't get content from %s", uri)
@@ -54,7 +57,6 @@ func startWorker(wg *sync.WaitGroup, uri string, quotaCh chan struct{}, datach c
 	cnt := strings.Count(body, inlineWord)
 	fmt.Printf("Count for %s: %d\n", uri, cnt)
 	datach <- cnt
-	<-quotaCh
 }
 
 func get(uri string) (string, error) {
