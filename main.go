@@ -11,7 +11,7 @@ import (
 	"sync"
 )
 
-const inlineWord = "golang"
+const inlineWord = "Go"
 const workerlimit = 5
 
 func main() {
