@@ -11,17 +11,19 @@ import (
 	"sync"
 )
 
-const inlineWord = "Go"
+const inlineWord = "golang"
 
 func main() {
 	in := bufio.NewScanner(os.Stdin)
 
 	total := 0
 	datach := make(chan int)
+	dataresult := make(chan int)
 	go func() {
 		for data := range datach {
 			total += data
 		}
+		dataresult <- total
 	}()
 
 	ratelimit := 5
@@ -38,7 +40,7 @@ func main() {
 
 	wg.Wait()
 	close(datach)
-	fmt.Printf("Total: %d\n", total)
+	fmt.Printf("Total: %d\n", <-dataresult)
 }
 
 func startWorker(wg *sync.WaitGroup, uri string, quotaCh chan struct{}, datach chan int) {
